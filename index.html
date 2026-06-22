@@ -1498,7 +1498,6 @@ const TOKEN_ABI = [
 ];
 
 // ── Data layers ──
-const STORAGE_KEY = 'goldlaunch_imported_tokens';
 const LOCAL_KEY   = 'goldlaunch_local_tokens';  // personal manual imports
 
 function loadLocalTokens() {
@@ -1508,15 +1507,8 @@ function saveLocalTokens(list) {
   try { localStorage.setItem(LOCAL_KEY, JSON.stringify(list)); } catch {}
 }
 
-// Cached public tokens (fetched from tokens.json + chain, cached in localStorage)
-function loadPublicCache() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
-}
-function savePublicCache(list) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); } catch {}
-}
-
-let publicTokens  = loadPublicCache();  // all visitors see these (from tokens.json)
+// Public tokens: loaded from tokens.json on every page load
+let publicTokens  = [];
 let localTokens   = loadLocalTokens();   // only this browser sees these
 
 // Build merged token list: public first, then local (dedup by address)
@@ -1605,73 +1597,60 @@ function formatCompact(num) {
 }
 
 // ── Load public tokens from tokens.json ──
-// tokens.json contains [{address, cached:{symbol,name,price_usd,change_24h,volume_24h,market_cap,...}}]
+// Always fetch tokens.json (no localStorage caching for public tokens)
 async function loadPublicTokens() {
-  const cache = loadPublicCache();
-  const cacheAge = cache.length && cache[0]._ts ? Date.now() - cache[0]._ts : Infinity;
-  const isFresh = cache.length && cacheAge < 5 * 60 * 1000;
+  try {
+    const res = await fetch('tokens.json');
+    if (!res.ok) throw new Error('fetch failed');
+    const entries = await res.json();
 
-  if (!isFresh) {
-    try {
-      const res = await fetch('tokens.json');
-      if (!res.ok) throw new Error('fetch failed');
-      const entries = await res.json();
-
-      // Build a lookup map for cached market data
-      const cacheMap = {};
-      for (const entry of entries) {
-        if (entry.address && entry.cached) {
-          cacheMap[entry.address.toLowerCase()] = entry.cached;
-        }
+    // Build a lookup map for cached market data
+    const cacheMap = {};
+    for (const entry of entries) {
+      if (entry.address && entry.cached) {
+        cacheMap[entry.address.toLowerCase()] = entry.cached;
       }
-
-      const updated = [];
-      for (const entry of entries) {
-        const addr = entry.address;
-        if (!isAddress(addr)) continue;
-        try {
-          const existing = cache.find(t => t.address.toLowerCase() === addr.toLowerCase());
-          if (existing) { updated.push(existing); continue; }
-
-          // Read chain data (name, symbol, mint info, etc.) from BSC
-          const data = await fetchTokenData(addr);
-
-          // Apply cached market data from tokens.json
-          const cd = cacheMap[addr.toLowerCase()];
-          if (cd) {
-            if (cd.price_usd) {
-              data.priceUsd = Number(cd.price_usd);
-              data.price = data.priceUsd;
-              data.hasMarket = true;
-            }
-            if (cd.change_24h != null) {
-              const ch = Number(cd.change_24h);
-              if (!isNaN(ch)) data.change = ch;
-            }
-            if (cd.volume_24h) {
-              const v = Number(cd.volume_24h);
-              if (!isNaN(v)) data.vol = '$' + formatCompact(v);
-            }
-            if (cd.market_cap) {
-              const m = Number(cd.market_cap);
-              if (!isNaN(m)) data.cap = '$' + formatCompact(m);
-            }
-          }
-
-          data.source = 'public';
-          data._ts = Date.now();
-          updated.push(data);
-        } catch { /* skip broken/unreadable addresses */ }
-      }
-      publicTokens = updated;
-      savePublicCache(publicTokens);
-    } catch {
-      publicTokens = cache;
     }
-  } else {
-    publicTokens = cache;
+
+    const updated = [];
+    for (const entry of entries) {
+      const addr = entry.address;
+      if (!isAddress(addr)) continue;
+      try {
+        // Read chain data (name, symbol, mint info, etc.) from BSC
+        const data = await fetchTokenData(addr);
+
+        // Apply cached market data from tokens.json
+        const cd = cacheMap[addr.toLowerCase()];
+        if (cd) {
+          if (cd.price_usd && !isNaN(Number(cd.price_usd))) {
+            data.priceUsd = Number(cd.price_usd);
+            data.price = data.priceUsd;
+            data.hasMarket = true;
+          }
+          if (cd.change_24h != null && cd.change_24h !== '') {
+            const ch = Number(cd.change_24h);
+            if (!isNaN(ch)) data.change = ch;
+          }
+          if (cd.volume_24h && !isNaN(Number(cd.volume_24h))) {
+            const v = Number(cd.volume_24h);
+            data.vol = '$' + formatCompact(v);
+          }
+          if (cd.market_cap && !isNaN(Number(cd.market_cap))) {
+            const m = Number(cd.market_cap);
+            data.cap = '$' + formatCompact(m);
+          }
+        }
+
+        data.source = 'public';
+        updated.push(data);
+      } catch { /* skip broken/unreadable addresses */ }
+    }
+    publicTokens = updated;
+  } catch (e) {
+    console.warn('loadPublicTokens failed:', e.message);
+    publicTokens = [];
   }
-  publicTokens.forEach(t => { delete t._ts; });
   renderTokens();
 }
 
