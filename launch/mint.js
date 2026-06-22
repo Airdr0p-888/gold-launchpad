@@ -46,7 +46,11 @@ const state = {
   rewardDecimals: 18,
   rewardSymbol: "BNB",
   nativeSymbol: "BNB",
-  mode: 0
+  mode: 0,
+  mintEnabled: true,
+  hasMinted: false,
+  mintedCount: 0,
+  maxMintCount: 0
 };
 
 const $ = (id) => document.getElementById(id);
@@ -166,6 +170,10 @@ async function refreshContract() {
   state.mode = Number(mode);
   state.rewardSymbol = state.mode === 0 ? state.nativeSymbol : "USDT";
   state.rewardDecimals = 18;
+  state.mintEnabled = mintEnabled;
+  state.hasMinted = hasMinted;
+  state.mintedCount = Number(mintedCount);
+  state.maxMintCount = Number(maxMintCount);
 
   let whitelistStatus = "未开启";
   if (whitelistEnabled) {
@@ -204,11 +212,27 @@ async function refreshContract() {
     ["分红储备", `${formatAmount(dividendReserve, state.rewardDecimals)} ${state.rewardSymbol}`],
     ["最低持仓", `${formatAmount(minTokenDividendBalance, state.tokenDecimals)} ${symbol}`]
   ]);
+
+  // 控制 Mint 按钮状态
+  const btn = $("mintNow");
+  if (!mintEnabled || state.hasMinted || state.mintedCount >= state.maxMintCount) {
+    btn.disabled = true;
+    if (!mintEnabled) btn.textContent = "Mint 已关闭";
+    else if (state.hasMinted) btn.textContent = "已 Mint 过";
+    else btn.textContent = "Mint 已满";
+  } else {
+    btn.disabled = false;
+    btn.textContent = state.mode === 0 ? "BNB Mint" : "USDT Mint";
+  }
 }
 
 async function mintNow() {
   await ensureWallet();
   if (!state.contract) await loadContract();
+  // 前置检查：避免发起必然失败的交易
+  if (!state.mintEnabled) throw new Error("Mint 已关闭，无法继续");
+  if (state.hasMinted) throw new Error("该钱包已经 Mint 过，每个地址限 Mint 一次");
+  if (state.mintedCount >= state.maxMintCount) throw new Error("Mint 已满/售罄");
   const address = await state.contract.getAddress();
   const mode = Number(await state.contract.mintMode());
   const price = await state.contract.mintPrice();
@@ -263,6 +287,8 @@ const ERROR_TRANSLATIONS = [
   [/no\s*lp\s*supply/i, "无 LP 流动性供应"],
   [/bad\s*BNB/i, "发送的 BNB 金额不正确"],
   [/zero\s*amount/i, "数量不能为 0"],
+  // Generic / undecoded
+  [/unknown\s*custom\s*error/i, "合约执行失败，请确认操作条件是否满足（如 Mint 是否已关闭、是否已满、是否已 Mint 过）"],
 ];
 
 function translateError(message) {

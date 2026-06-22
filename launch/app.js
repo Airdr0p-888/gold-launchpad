@@ -1072,6 +1072,8 @@ const ERROR_TRANSLATIONS = [
   [/no\s*lp\s*supply/i, "无 LP 流动性供应"],
   [/bad\s*BNB/i, "发送的 BNB 金额不正确"],
   [/zero\s*amount/i, "数量不能为 0"],
+  // Generic / undecoded
+  [/unknown\s*custom\s*error/i, "合约执行失败，请确认操作条件是否满足（如 Mint 是否已关闭/已满，白名单，余额等）"],
 ];
 
 function translateError(message) {
