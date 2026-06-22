@@ -1903,6 +1903,12 @@ function renderTokens() {
 loadPublicTokens().then(() => {
   // After public tokens loaded, refresh local token chain states (mint status etc.)
   if (localTokens.length > 0) refreshLocalTokens();
+  // Periodically refresh local token states every 30s
+  setInterval(() => {
+    if (localTokens.length > 0) refreshLocalTokens();
+  }, 30000);
+  // Periodically try to fetch Ave.ai data for local tokens without market data
+  setInterval(() => { refreshLocalTokensMarket(); }, 60000);
 });
 
 // ── Refresh local token chain states ──
@@ -1948,18 +1954,63 @@ async function refreshLocalTokens() {
   }
 }
 
-// ── Ave.ai 市场数据抓取（带 CORS 代理回退）──
-async function fetchAveMarketData(address) {
-  const aveUrl = `https://prod.ave-api.com/v2/tokens?keyword=${encodeURIComponent(address)}&chain=bsc`;
-  const headers = { 'X-API-KEY': 'UgbYEGOBtEx8r3uLTxCJPx7sEaYYMvZ6219iLSdYBUIFwbzu3HZ9qMeMprSdkHp9' };
-  for (const fetcher of [
-    () => fetch(aveUrl, { headers }),
-    () => fetch('https://corsproxy.io/?' + encodeURIComponent(aveUrl))
-  ]) {
+// ── 自动获取本地代币 Ave.ai 行情（后台定时执行）──
+async function refreshLocalTokensMarket() {
+  for (let i = 0; i < localTokens.length; i++) {
+    const t = localTokens[i];
+    if (t.hasMarket) continue; // 已有行情数据，跳过
     try {
-      const res = await fetcher();
-      if (!res.ok) continue;
-      const data = await res.json();
+      const data = await fetchAveMarketData(t.address);
+      if (data) {
+        localTokens[i].priceUsd = Number(data.price_usd) || 0;
+        localTokens[i].price = localTokens[i].priceUsd;
+        localTokens[i].hasMarket = true;
+        localTokens[i].change = Number(data.change_24h) || 0;
+        localTokens[i].vol = '$' + formatCompact(Number(data.volume_24h) || 0);
+        localTokens[i].cap = '$' + formatCompact(Number(data.market_cap) || 0);
+        saveLocalTokens(localTokens);
+        renderTokens();
+        console.log('[market] Fetched Ave.ai data for', t.symbol || t.address);
+      }
+    } catch (e) { /* ignore */ }
+  }
+}
+
+// ── Ave.ai 市场数据抓取（CORS 代理 + API Key 作为 URL 参数）──
+const AVE_API_KEY_IDX = 'UgbYEGOBtEx8r3uLTxCJPx7sEaYYMvZ6219iLSdYBUIFwbzu3HZ9qMeMprSdkHp9';
+async function fetchAveMarketData(address) {
+  const attempts = [
+    {
+      label: 'corsproxy+key',
+      fn: async () => {
+        const url = `https://prod.ave-api.com/v2/tokens?keyword=${encodeURIComponent(address)}&chain=bsc&api_key=${AVE_API_KEY_IDX}`;
+        const proxy = 'https://corsproxy.io/?' + encodeURIComponent(url);
+        const res = await fetch(proxy);
+        return res.ok ? res.json() : null;
+      }
+    },
+    {
+      label: 'allorigins',
+      fn: async () => {
+        const url = `https://prod.ave-api.com/v2/tokens?keyword=${encodeURIComponent(address)}&chain=bsc&api_key=${AVE_API_KEY_IDX}`;
+        const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+        const res = await fetch(proxy);
+        return res.ok ? res.json() : null;
+      }
+    },
+    {
+      label: 'direct',
+      fn: async () => {
+        const url = `https://prod.ave-api.com/v2/tokens?keyword=${encodeURIComponent(address)}&chain=bsc`;
+        const res = await fetch(url, { headers: { 'X-API-KEY': AVE_API_KEY_IDX } });
+        return res.ok ? res.json() : null;
+      }
+    }
+  ];
+  for (const attempt of attempts) {
+    try {
+      const data = await attempt.fn();
+      if (!data) continue;
       const tokens = data?.data || [];
       const match = Array.isArray(tokens)
         ? tokens.find(t => (t.token || '').toLowerCase() === address.toLowerCase())
@@ -1976,7 +2027,7 @@ async function fetchAveMarketData(address) {
           updated_at: Math.floor(Date.now() / 1000)
         };
       }
-    } catch { /* try next */ }
+    } catch (e) { /* try next */ }
   }
   return null;
 }

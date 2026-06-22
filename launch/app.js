@@ -826,19 +826,46 @@ async function deployContract(form) {
   saveDeployedToken(address, args);
 }
 
-// ── Ave.ai 市场数据抓取（带 CORS 代理回退）──
+// ── Ave.ai 市场数据抓取（CORS 代理 + API Key 作为 URL 参数）──
+const AVE_API_KEY = 'UgbYEGOBtEx8r3uLTxCJPx7sEaYYMvZ6219iLSdYBUIFwbzu3HZ9qMeMprSdkHp9';
 async function fetchAndCacheAveData(address) {
-  const aveUrl = `https://prod.ave-api.com/v2/tokens?keyword=${encodeURIComponent(address)}&chain=bsc`;
-  const headers = { 'X-API-KEY': 'UgbYEGOBtEx8r3uLTxCJPx7sEaYYMvZ6219iLSdYBUIFwbzu3HZ9qMeMprSdkHp9' };
-  // Try direct first, then CORS proxy
-  for (const fetcher of [
-    () => fetch(aveUrl, { headers }),
-    () => fetch('https://corsproxy.io/?' + encodeURIComponent(aveUrl))
-  ]) {
+  // 尝试多种方式获取 Ave.ai 数据
+  const attempts = [
+    // 方式1: CORS 代理 + API Key 作为 URL 查询参数
+    {
+      label: 'corsproxy+key',
+      fn: async () => {
+        const url = `https://prod.ave-api.com/v2/tokens?keyword=${encodeURIComponent(address)}&chain=bsc&api_key=${AVE_API_KEY}`;
+        const proxy = 'https://corsproxy.io/?' + encodeURIComponent(url);
+        const res = await fetch(proxy);
+        return res.ok ? res.json() : null;
+      }
+    },
+    // 方式2: 另一个 CORS 代理
+    {
+      label: 'allorigins',
+      fn: async () => {
+        const url = `https://prod.ave-api.com/v2/tokens?keyword=${encodeURIComponent(address)}&chain=bsc&api_key=${AVE_API_KEY}`;
+        const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+        const res = await fetch(proxy);
+        return res.ok ? res.json() : null;
+      }
+    },
+    // 方式3: 直接请求（部分浏览器/环境可能放行）
+    {
+      label: 'direct',
+      fn: async () => {
+        const url = `https://prod.ave-api.com/v2/tokens?keyword=${encodeURIComponent(address)}&chain=bsc`;
+        const res = await fetch(url, { headers: { 'X-API-KEY': AVE_API_KEY } });
+        return res.ok ? res.json() : null;
+      }
+    }
+  ];
+
+  for (const attempt of attempts) {
     try {
-      const res = await fetcher();
-      if (!res.ok) continue;
-      const data = await res.json();
+      const data = await attempt.fn();
+      if (!data) continue;
       const tokens = data?.data || [];
       const match = Array.isArray(tokens)
         ? tokens.find(t => (t.token || '').toLowerCase() === address.toLowerCase())
@@ -855,7 +882,7 @@ async function fetchAndCacheAveData(address) {
           updated_at: Math.floor(Date.now() / 1000)
         };
       }
-    } catch { /* try next */ }
+    } catch (e) { /* try next */ }
   }
   return null;
 }
