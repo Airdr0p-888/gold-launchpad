@@ -45,7 +45,7 @@
               <div class="grid">
                 <label>代币名称<input name="name" value="GOLDLAUNCH" required /></label>
                 <label>代币符号<input name="symbol" value="GOLD" required /></label>
-                <label>总供应量<input name="totalSupply" type="number" value="1000000000" min="1" required /></label>
+                <label>总供应量<input name="totalSupply" type="number" value="100" min="1" max="100" oninput="if(+this.value>100)this.value=100;if(+this.value<1)this.value=1" required /></label>
               </div>
             </fieldset>
 
