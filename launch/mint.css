@@ -1,13 +1,14 @@
 :root {
   color-scheme: dark;
-  --bg: #0f1217;
-  --panel: #181d24;
-  --panel-2: #202733;
-  --line: #343d4b;
-  --text: #f4f7fb;
-  --muted: #aeb8c7;
-  --accent: #35c7a0;
-  --accent-2: #f3b64a;
+  --bg: #080808;
+  --panel: #111;
+  --panel-2: #1a1a1a;
+  --line: rgba(212,160,23,0.2);
+  --text: #EDE5D0;
+  --muted: #7A7060;
+  --gold: #D4A017;
+  --gold-light: #F5C842;
+  --gold-dim: rgba(212,160,23,0.12);
   --danger: #ff6b6b;
 }
 
@@ -52,10 +53,10 @@ h2 { font-size: 22px; }
 }
 
 .eyebrow {
-  color: var(--accent);
+  color: var(--gold);
   font-size: 12px;
   font-weight: 800;
-  letter-spacing: 0;
+  letter-spacing: 1px;
   text-transform: uppercase;
 }
 
@@ -101,13 +102,13 @@ input {
   min-height: 44px;
   border-radius: 8px;
   border: 1px solid var(--line);
-  background: #0d1117;
+  background: #0a0a0a;
   color: var(--text);
   padding: 0 12px;
   outline: none;
 }
 
-input:focus { border-color: var(--accent); }
+input:focus { border-color: var(--gold); }
 
 button {
   min-height: 44px;
@@ -120,9 +121,9 @@ button {
   padding: 0 16px;
 }
 
-button:hover { border-color: var(--accent); }
+button:hover { border-color: var(--gold); }
 button:disabled { opacity: .55; cursor: wait; }
-.primary { background: var(--accent); color: #061411; border-color: var(--accent); }
+.primary { background: var(--gold); color: #000; border-color: var(--gold); }
 .secondary { background: transparent; }
 .wide { width: 100%; }
 
@@ -152,8 +153,8 @@ button:disabled { opacity: .55; cursor: wait; }
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 0 10px;
-  background: #0d1117;
-  color: var(--accent-2);
+  background: #0a0a0a;
+  color: var(--gold-light);
   font-weight: 800;
 }
 
@@ -168,7 +169,7 @@ button:disabled { opacity: .55; cursor: wait; }
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 13px;
-  background: #10151d;
+  background: #0d0d0d;
   overflow-wrap: anywhere;
 }
 
@@ -188,7 +189,7 @@ button:disabled { opacity: .55; cursor: wait; }
   white-space: pre-wrap;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #080b10;
+  background: #060606;
   color: #d7fbe9;
   padding: 14px;
 }
