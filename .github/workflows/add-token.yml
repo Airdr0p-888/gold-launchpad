@@ -1,0 +1,61 @@
+name: Add Token to Whitelist
+
+on:
+  workflow_dispatch:
+    inputs:
+      address:
+        description: '合约地址'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Append to user-tokens.json
+        run: |
+          ADDR="${{ github.event.inputs.address }}"
+          # Read existing, append, deduplicate
+          node -e "
+            const fs = require('fs');
+            const file = 'user-tokens.json';
+            let tokens = [];
+            try { tokens = JSON.parse(fs.readFileSync(file,'utf-8')); } catch(e){}
+            if (!Array.isArray(tokens)) tokens = [];
+            const exists = tokens.some(t => t.address && t.address.toLowerCase() === '${ADDR}'.toLowerCase());
+            if (!exists) {
+              tokens.push({ address: '${ADDR}', addedAt: new Date().toISOString() });
+              fs.writeFileSync(file, JSON.stringify(tokens, null, 2) + '\n');
+              console.log('Added token:', '${ADDR}');
+            } else {
+              console.log('Token already exists:', '${ADDR}');
+            }
+          "
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch Ave.ai market data
+        env:
+          AVE_API_KEY: ${{ secrets.AVE_API_KEY }}
+        run: node refresh-tokens.js
+
+      - name: Commit & push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add tokens.json user-tokens.json
+          if git diff --staged --quiet; then
+            echo "No changes"
+          else
+            git commit -m "chore: add token ${{ github.event.inputs.address }} to whitelist [skip ci]"
+            git push
+          fi

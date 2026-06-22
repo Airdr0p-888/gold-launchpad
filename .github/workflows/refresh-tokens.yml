@@ -29,9 +29,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add tokens.json
+          git add tokens.json user-tokens.json
           if git diff --staged --quiet; then
-            echo "No changes to tokens.json"
+            echo "No changes"
           else
             git commit -m "chore: refresh token market data [skip ci]"
             git push

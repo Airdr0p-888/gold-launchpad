@@ -56,7 +56,30 @@ async function main() {
   const raw = fs.readFileSync(TOKENS_FILE, 'utf-8');
   const entries = JSON.parse(raw);
 
-  console.log(`[refresh-tokens] Found ${entries.length} token(s)`);
+  console.log(`[refresh-tokens] Found ${entries.length} token(s) in tokens.json`);
+
+  // Merge tokens from user-tokens.json (deployed by users)
+  const userTokensFile = path.join(__dirname, 'user-tokens.json');
+  let userMerged = 0;
+  if (fs.existsSync(userTokensFile)) {
+    try {
+      const userRaw = fs.readFileSync(userTokensFile, 'utf-8');
+      const userTokens = JSON.parse(userRaw);
+      if (Array.isArray(userTokens) && userTokens.length > 0) {
+        const seen = new Set(entries.map(e => e.address.toLowerCase()));
+        for (const ut of userTokens) {
+          const addr = (ut.address || '').toLowerCase();
+          if (!addr || seen.has(addr)) continue;
+          entries.push({ address: ut.address, cached: {} });
+          seen.add(addr);
+          userMerged++;
+        }
+        if (userMerged > 0) console.log(`[refresh-tokens] Merged ${userMerged} new token(s) from user-tokens.json`);
+      }
+    } catch (err) {
+      console.log(`[refresh-tokens] Error reading user-tokens.json: ${err.message}`);
+    }
+  }
 
   let updated = 0;
   for (const entry of entries) {
@@ -87,6 +110,11 @@ async function main() {
 
   // Write back
   fs.writeFileSync(TOKENS_FILE, JSON.stringify(entries, null, 2) + '\n', 'utf-8');
+  // Clear user-tokens.json after merge
+  if (userMerged > 0 && fs.existsSync(userTokensFile)) {
+    fs.writeFileSync(userTokensFile, '[]\n', 'utf-8');
+    console.log('[refresh-tokens] Cleared user-tokens.json');
+  }
   console.log(`\n[refresh-tokens] Done. Updated ${updated}/${entries.length} token(s).`);
 
   // Exit with error if no tokens were updated (might indicate API issue)
