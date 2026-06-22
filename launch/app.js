@@ -860,6 +860,12 @@ async function fetchAndCacheAveData(address) {
   return null;
 }
 
+// ── 提示用户一键提交到公开广场 ──
+function showAddToPublicLink(address) {
+  const link = `https://github.com/Airdr0p-888/gold-launchpad/actions/workflows/add-token.yml`;
+  log(`<a href="${link}" target="_blank" style="color:#D4A017;text-decoration:underline;">👉 点此加入公开广场白名单</a>（粘贴合约地址 <b>${address}</b>，点「Run workflow」，约1分钟后代币广场刷新即可看到行情数据）`);
+}
+
 // ── 本地存储 ──
 function saveDeployedToken(address, args) {
   try {
@@ -898,6 +904,8 @@ function saveDeployedToken(address, args) {
 
     localStorage.setItem(storageKey, JSON.stringify(existing));
     log(`合约信息已保存到本地存储，可在 GOLDLAUNCH 代币广场查看。`);
+    // 提示一键提交到公开广场
+    showAddToPublicLink(address);
     // 背景抓取 Ave.ai 市场数据（非关键，不影响主流程）
     fetchAndCacheAveData(address).then(cached => {
       if (cached) {
