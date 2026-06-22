@@ -1701,7 +1701,36 @@ async function loadPublicTokens() {
 
         data.source = 'public';
         updated.push(data);
-      } catch { /* skip broken/unreadable addresses */ }
+      } catch (eRpc) {
+        // BSC RPC unreachable (mobile / rate-limit) — build fallback from tokens.json cache
+        console.warn('BSC RPC failed for', shortAddr(addr), eRpc.message);
+        const cd = cacheMap[addr.toLowerCase()];
+        if (cd) {
+          const fallback = {
+            rank: 0, address: addr,
+            name: cd.name || shortAddr(addr),
+            sym: cd.symbol || 'TOKEN',
+            color: COLORS[Math.floor(Math.random() * COLORS.length)],
+            mintPrice: 0,
+            price: cd.price_usd ? Number(cd.price_usd) : 0,
+            priceUsd: cd.price_usd ? Number(cd.price_usd) : null,
+            cap: '--',
+            vol: '--',
+            change: cd.change_24h != null && cd.change_24h !== '' ? Number(cd.change_24h) : null,
+            progress: 0, status: 'ended',
+            decimals: 18, mintedCount: 0, maxMintCount: 0,
+            mintEnabled: false, tradingOpen: true,
+            hasMarket: true, source: 'public'
+          };
+          if (cd.volume_24h && !isNaN(Number(cd.volume_24h))) {
+            fallback.vol = '$' + formatCompact(Number(cd.volume_24h));
+          }
+          if (cd.market_cap && !isNaN(Number(cd.market_cap))) {
+            fallback.cap = '$' + formatCompact(Number(cd.market_cap));
+          }
+          updated.push(fallback);
+        }
+      }
     }
     publicTokens = updated;
   } catch (e) {
