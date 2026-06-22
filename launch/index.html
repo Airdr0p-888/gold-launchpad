@@ -45,7 +45,7 @@
               <div class="grid">
                 <label>代币名称<input name="name" value="GOLDLAUNCH" required /></label>
                 <label>代币符号<input name="symbol" value="GOLD" required /></label>
-                <label>总供应量<input name="totalSupply" type="number" value="100" min="1" max="100" oninput="if(+this.value>100)this.value=100;if(+this.value<1)this.value=1" required /></label>
+                <label>总供应量 <small style="color:#D4A017;font-weight:400">（本平台总供应量限制1-100）</small><input name="totalSupply" type="number" value="100" min="1" max="100" oninput="if(+this.value>100)this.value=100;if(+this.value<1)this.value=1" required /></label>
               </div>
             </fieldset>
 
@@ -53,7 +53,7 @@
               <legend>网络地址</legend>
               <div class="grid">
                 <label>Mint 模式<select name="mintMode"><option value="0">BNB</option><option value="1">USDT</option></select></label>
-                <label>USDT 地址<input name="usdtAddress" placeholder="连接钱包后自动填写" /></label>
+                <label>USDT 地址 <small style="color:#D4A017;font-weight:400">（USDT暂不可用）</small><input name="usdtAddress" placeholder="连接钱包后自动填写" /></label>
                 <label>Router 地址<input name="router" placeholder="连接钱包后自动填写" required /></label>
               </div>
             </fieldset>
