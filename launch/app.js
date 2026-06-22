@@ -364,6 +364,11 @@ function setDefaultMarketingWallet(force = false) {
 
 function formatNumber(value) {
   if (!Number.isFinite(value)) return "0";
+  if (value === 0) return "0";
+  // Show up to 10 fractional digits, strip trailing zeros
+  if (Math.abs(value) < 1 && value !== 0) {
+    return value.toFixed(10).replace(/0+$/, '').replace(/\.$/, '');
+  }
   return value.toLocaleString("en-US", { maximumFractionDigits: 6 });
 }
 
@@ -405,7 +410,8 @@ function syncMintPlan(changedName) {
   const maxMint = Number(maxMintInput.value || 0);
 
   if ((changedName === "totalSupply" || changedName === "maxMintCount") && total > 0 && maxMint > 0) {
-    perMintInput.value = String(Math.floor(total / maxMint));
+    const exact = total / maxMint;
+    perMintInput.value = String(exact < 1 ? exact.toFixed(18).replace(/0+$/, '').replace(/\.$/, '') : Math.floor(exact));
   }
   if (changedName === "tokenPerMint" && total > 0 && perMint > 0) {
     maxMintInput.value = String(Math.floor(total / perMint));
