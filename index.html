@@ -1900,7 +1900,37 @@ function renderTokens() {
 }
 
 // Init: load public tokens from tokens.json, then render
-loadPublicTokens();
+loadPublicTokens().then(() => {
+  // After public tokens loaded, refresh local token chain states (mint status etc.)
+  if (localTokens.length > 0) refreshLocalTokens();
+});
+
+// ── Refresh local token chain states ──
+async function refreshLocalTokens() {
+  let changed = false;
+  for (let i = 0; i < localTokens.length; i++) {
+    const addr = localTokens[i].address;
+    if (!isAddress(addr)) continue;
+    try {
+      const chain = await fetchTokenData(addr);
+      // Only update mutable fields, preserve local-only fields like source
+      localTokens[i].status = chain.status;
+      localTokens[i].mintEnabled = chain.mintEnabled;
+      localTokens[i].tradingOpen = chain.tradingOpen;
+      localTokens[i].mintedCount = chain.mintedCount;
+      localTokens[i].maxMintCount = chain.maxMintCount;
+      localTokens[i].progress = chain.progress;
+      localTokens[i].mintPrice = chain.mintPrice;
+      changed = true;
+    } catch {
+      // Keep local cached data
+    }
+  }
+  if (changed) {
+    saveLocalTokens(localTokens);
+    renderTokens();
+  }
+}
 
 </script>
 </body>

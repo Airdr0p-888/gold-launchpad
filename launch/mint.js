@@ -232,6 +232,46 @@ async function claimDividends() {
   await refreshContract();
 }
 
+const ERROR_TRANSLATIONS = [
+  // Mint errors
+  [/not\s*bnb\s*mode/i, "当前合约是 USDT 模式，不支持 BNB Mint"],
+  [/not\s*usdt\s*mode/i, "当前合约是 BNB 模式，不支持 USDT Mint"],
+  [/bad\s*bnb\s*amount/i, "发送的 BNB 金额不正确，请检查 Mint 价格"],
+  [/mint\s*disabled/i, "Mint 已关闭"],
+  [/already\s*minted/i, "该钱包已经 Mint 过了，每个地址限 Mint 一次"],
+  [/mint\s*full/i, "Mint 已满/售罄"],
+  [/not\s*whitelisted/i, "当前钱包不在白名单中，请联系管理员添加"],
+  [/insufficient\s*token\s*reserve/i, "合约内代币储备不足以发放"],
+  // Trading errors
+  [/trading\s*not\s*open/i, "交易尚未开启"],
+  [/buy\s*limit/i, "超过单钱包买入限额"],
+  // OpenZeppelin errors
+  [/Pausable:\s*paused/i, "合约已暂停"],
+  [/Ownable:\s*caller\s*is\s*not\s*the\s*owner/i, "当前钱包不是合约 Owner，无权操作"],
+  [/ReentrancyGuard:\s*reentrant\s*call/i, "操作太频繁，请稍后再试"],
+  [/ERC20:\s*transfer\s*amount\s*exceeds\s*balance/i, "代币余额不足"],
+  [/ERC20:\s*insufficient\s*allowance/i, "代币授权不足，请先授权"],
+  // Admin errors
+  [/tax\s*>\s*10%/, "税率超过 10% 上限"],
+  [/sum\s*!=\s*10000/, "税收分配合计不等于 100%"],
+  [/lt\s*minted/i, "新最大值不能小于已 Mint 数"],
+  [/no\s*available\s*BNB/i, "无可提取的 BNB"],
+  [/no\s*available\s*token/i, "无可提取的代币"],
+  [/exceeds\s*available/i, "提取数量超过可用余额"],
+  [/exceeds\s*reserve/i, "提取数量超过储备"],
+  [/no\s*circulating\s*supply/i, "代币无流通供应（全在合约内）"],
+  [/no\s*lp\s*supply/i, "无 LP 流动性供应"],
+  [/bad\s*BNB/i, "发送的 BNB 金额不正确"],
+  [/zero\s*amount/i, "数量不能为 0"],
+];
+
+function translateError(message) {
+  for (const [pattern, translation] of ERROR_TRANSLATIONS) {
+    if (pattern.test(message)) return translation;
+  }
+  return null;
+}
+
 async function run(button, fn) {
   try {
     button.disabled = true;
@@ -239,8 +279,10 @@ async function run(button, fn) {
   } catch (err) {
     console.error(err);
     const message = err.shortMessage || err.reason || err.message || String(err);
-    if (/not\s*whitelisted/i.test(message)) {
-      log("当前钱包不在白名单中，请联系管理员添加");
+    // Try translation first
+    const translated = translateError(message);
+    if (translated) {
+      log(translated);
     } else if (message.includes("TRANSFER_FROM_FAILED")) {
       log("TRANSFER_FROM_FAILED：通常是授权不足、余额不足、USDT/Router/网络不匹配，或池子太浅导致路由失败。");
     } else if (message.includes("insufficient funds")) {

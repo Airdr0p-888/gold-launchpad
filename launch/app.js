@@ -1045,6 +1045,42 @@ window.ethereum?.on?.("chainChanged", () => {
 updateDeployHints();
 syncTaxShareControls();
 
+const ERROR_TRANSLATIONS = [
+  [/not\s*bnb\s*mode/i, "当前合约是 USDT 模式，不支持 BNB Mint"],
+  [/not\s*usdt\s*mode/i, "当前合约是 BNB 模式，不支持 USDT Mint"],
+  [/bad\s*bnb\s*amount/i, "发送的 BNB 金额不正确，请检查 Mint 价格"],
+  [/mint\s*disabled/i, "Mint 已关闭"],
+  [/already\s*minted/i, "该钱包已经 Mint 过了，每个地址限 Mint 一次"],
+  [/mint\s*full/i, "Mint 已满/售罄"],
+  [/not\s*whitelisted/i, "当前钱包不在白名单中，请联系管理员添加"],
+  [/insufficient\s*token\s*reserve/i, "合约内代币储备不足以发放"],
+  [/trading\s*not\s*open/i, "交易尚未开启"],
+  [/buy\s*limit/i, "超过单钱包买入限额"],
+  [/Pausable:\s*paused/i, "合约已暂停"],
+  [/Ownable:\s*caller\s*is\s*not\s*the\s*owner/i, "当前钱包不是合约 Owner，无权操作"],
+  [/ReentrancyGuard:\s*reentrant\s*call/i, "操作太频繁，请稍后再试"],
+  [/ERC20:\s*transfer\s*amount\s*exceeds\s*balance/i, "代币余额不足"],
+  [/ERC20:\s*insufficient\s*allowance/i, "代币授权不足，请先授权"],
+  [/tax\s*>\s*10%/, "税率超过 10% 上限"],
+  [/sum\s*!=\s*10000/, "税收分配合计不等于 100%"],
+  [/lt\s*minted/i, "新最大值不能小于已 Mint 数"],
+  [/no\s*available\s*BNB/i, "无可提取的 BNB"],
+  [/no\s*available\s*token/i, "无可提取的代币"],
+  [/exceeds\s*available/i, "提取数量超过可用余额"],
+  [/exceeds\s*reserve/i, "提取数量超过储备"],
+  [/no\s*circulating\s*supply/i, "代币无流通供应（全在合约内）"],
+  [/no\s*lp\s*supply/i, "无 LP 流动性供应"],
+  [/bad\s*BNB/i, "发送的 BNB 金额不正确"],
+  [/zero\s*amount/i, "数量不能为 0"],
+];
+
+function translateError(message) {
+  for (const [pattern, translation] of ERROR_TRANSLATIONS) {
+    if (pattern.test(message)) return translation;
+  }
+  return null;
+}
+
 async function run(button, fn) {
   try {
     setBusy(button, true);
@@ -1052,8 +1088,9 @@ async function run(button, fn) {
   } catch (err) {
     console.error(err);
     const message = err.shortMessage || err.message || String(err);
-    if (/not\s*whitelisted/i.test(message)) {
-      log("当前钱包不在白名单中，请联系管理员添加");
+    const translated = translateError(message);
+    if (translated) {
+      log(translated);
     } else if (message.includes("TRANSFER_FROM_FAILED")) {
       log("TRANSFER_FROM_FAILED：通常是 USDT 地址/Router 地址不匹配、USDT 余额不足、授权不足，或当前链不是该 Router 所在网络。请先确认 Mint 模式、USDT 地址、Pancake Router 和钱包网络一致。");
     } else {
