@@ -390,6 +390,7 @@ function updateDeployHints() {
   const defaults = activeNetworkDefaults();
   const currency = Number(form.elements.mintMode.value) === 0 ? (defaults?.native || "BNB") : "USDT";
   renderStats("deployHints", [
+    ["单次 Mint 代币数", formatNumber(perMint)],
     ["Mint 覆盖代币", formatNumber(mintedTokenPlan)],
     ["合约剩余预留", formatNumber(remaining)],
     ["预计总募集", `${formatNumber(price * maxMint)} ${currency}`],
@@ -398,6 +399,18 @@ function updateDeployHints() {
     ["每次进池资金", `${formatNumber(lpFundPerMint)} ${currency}`],
     ["每次合约留存资金", `${formatNumber(retainedFundPerMint)} ${currency}`]
   ]);
+}
+
+function formatDecimalForInput(value) {
+  if (!Number.isFinite(value) || value <= 0) return "0";
+  if (value >= 1) return String(Math.floor(value));
+  // For sub-1 values: use enough precision, strip trailing zeros, avoid becoming "0"
+  let s = value.toFixed(18).replace(/0+$/, "").replace(/\.$/, "");
+  // Safety: if all decimal digits are 0 (value < 1e-18), show scientific-like format
+  if (s === "0" || s === "") {
+    s = value.toExponential(8).replace(/0+$/, "").replace(/\.$/, "");
+  }
+  return s;
 }
 
 function syncMintPlan(changedName) {
@@ -411,7 +424,7 @@ function syncMintPlan(changedName) {
 
   if ((changedName === "totalSupply" || changedName === "maxMintCount") && total > 0 && maxMint > 0) {
     const exact = total / maxMint;
-    perMintInput.value = String(exact < 1 ? exact.toFixed(18).replace(/0+$/, '').replace(/\.$/, '') : Math.floor(exact));
+    perMintInput.value = formatDecimalForInput(exact);
   }
   if (changedName === "tokenPerMint" && total > 0 && perMint > 0) {
     maxMintInput.value = String(Math.floor(total / perMint));
@@ -1012,7 +1025,10 @@ $("refreshAdmin").addEventListener("click", async (e) => run(e.currentTarget, re
 document.querySelectorAll("[data-action]").forEach((btn) => btn.addEventListener("click", async () => run(btn, () => adminAction(btn.dataset.action))));
 
 ["totalSupply", "tokenPerMint", "maxMintCount", "mintPrice", "userMintShare", "lpFundShare"].forEach((name) => {
-  formField(name)?.addEventListener("input", () => syncMintPlan(name));
+  const field = formField(name);
+  if (!field) return;
+  field.addEventListener("input", () => syncMintPlan(name));
+  field.addEventListener("change", () => syncMintPlan(name));
 });
 TAX_SHARE_NAMES.forEach((name) => {
   formField(name)?.addEventListener("input", (event) => syncTaxShareControls(name, event.target.value));
