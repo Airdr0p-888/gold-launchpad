@@ -122,6 +122,28 @@ nav {
 }
 .nav-btn:hover { opacity: .8; }
 
+/* Hamburger */
+.hamburger {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  z-index: 200;
+}
+.hamburger span {
+  display: block;
+  width: 24px;
+  height: 2px;
+  background: var(--gold);
+  transition: transform .3s, opacity .3s;
+}
+.hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.hamburger.open span:nth-child(2) { opacity: 0; }
+.hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
 /* ── HERO ── */
 #hero {
   min-height: 100vh;
@@ -957,7 +979,26 @@ footer {
 
 /* ── RESPONSIVE ── */
 @media (max-width: 960px) {
-  .nav-menu { display: none; }
+  .hamburger { display: flex; }
+  .nav-menu {
+    position: fixed;
+    inset: 0;
+    background: rgba(8,8,8,0.97);
+    backdrop-filter: blur(20px);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    display: none;
+    z-index: 150;
+  }
+  .nav-menu.open { display: flex; }
+  .nav-menu a {
+    font-size: 18px;
+    padding: 14px 32px;
+    letter-spacing: 3px;
+  }
+  .nav-btn { display: none; }
   #page-about .about-grid { grid-template-columns: 1fr; }
   .about-art { order: -1; }
   .feat-grid { grid-template-columns: 1fr 1fr; }
@@ -1114,6 +1155,9 @@ footer {
     <li><a href="#" onclick="switchTab('roadmap');return false;">路线图</a></li>
     <li><a href="#" onclick="switchTab('faq');return false;">FAQ</a></li>
   </ul>
+  <button class="hamburger" id="hamburger" aria-label="菜单" onclick="toggleMenu()">
+    <span></span><span></span><span></span>
+  </button>
   <a href="#" class="nav-btn" onclick="switchTab('about');return false;">Launch App</a>
 </nav>
 
@@ -1450,8 +1494,21 @@ footer {
 </footer>
 
 <script>
+// ── Mobile Menu Toggle ──
+function toggleMenu() {
+  const menu = document.querySelector('.nav-menu');
+  const btn  = document.getElementById('hamburger');
+  menu.classList.toggle('open');
+  btn.classList.toggle('open');
+}
+function closeMenu() {
+  document.querySelector('.nav-menu').classList.remove('open');
+  document.getElementById('hamburger').classList.remove('open');
+}
+
 // ── Tab Switching ──
 function switchTab(name) {
+  closeMenu();
   // Hide all pages
   document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
   // Show target page
