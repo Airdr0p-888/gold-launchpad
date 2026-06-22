@@ -1052,7 +1052,9 @@ async function run(button, fn) {
   } catch (err) {
     console.error(err);
     const message = err.shortMessage || err.message || String(err);
-    if (message.includes("TRANSFER_FROM_FAILED")) {
+    if (/not\s*whitelisted/i.test(message)) {
+      log("当前钱包不在白名单中，请联系管理员添加");
+    } else if (message.includes("TRANSFER_FROM_FAILED")) {
       log("TRANSFER_FROM_FAILED：通常是 USDT 地址/Router 地址不匹配、USDT 余额不足、授权不足，或当前链不是该 Router 所在网络。请先确认 Mint 模式、USDT 地址、Pancake Router 和钱包网络一致。");
     } else {
       log(message);

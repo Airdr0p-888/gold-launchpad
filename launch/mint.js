@@ -239,7 +239,9 @@ async function run(button, fn) {
   } catch (err) {
     console.error(err);
     const message = err.shortMessage || err.reason || err.message || String(err);
-    if (message.includes("TRANSFER_FROM_FAILED")) {
+    if (/not\s*whitelisted/i.test(message)) {
+      log("当前钱包不在白名单中，请联系管理员添加");
+    } else if (message.includes("TRANSFER_FROM_FAILED")) {
       log("TRANSFER_FROM_FAILED：通常是授权不足、余额不足、USDT/Router/网络不匹配，或池子太浅导致路由失败。");
     } else if (message.includes("insufficient funds")) {
       log("Gas 不足：请确认当前网络的钱包里有足够原生币支付手续费。");
