@@ -826,6 +826,41 @@ async function deployContract(form) {
   saveDeployedToken(address, args);
 }
 
+// ── Ave.ai 市场数据抓取（带 CORS 代理回退）──
+async function fetchAndCacheAveData(address) {
+  const aveUrl = `https://prod.ave-api.com/v2/tokens?keyword=${encodeURIComponent(address)}&chain=bsc`;
+  const headers = { 'X-API-KEY': 'UgbYEGOBtEx8r3uLTxCJPx7sEaYYMvZ6219iLSdYBUIFwbzu3HZ9qMeMprSdkHp9' };
+  // Try direct first, then CORS proxy
+  for (const fetcher of [
+    () => fetch(aveUrl, { headers }),
+    () => fetch('https://corsproxy.io/?' + encodeURIComponent(aveUrl))
+  ]) {
+    try {
+      const res = await fetcher();
+      if (!res.ok) continue;
+      const data = await res.json();
+      const tokens = data?.data || [];
+      const match = Array.isArray(tokens)
+        ? tokens.find(t => (t.token || '').toLowerCase() === address.toLowerCase())
+        : null;
+      if (match) {
+        return {
+          symbol: match.symbol || '',
+          name: match.name || '',
+          price_usd: String(match.current_price_usd ?? ''),
+          change_24h: String(match.price_change_24h ?? ''),
+          volume_24h: String(match.tx_volume_u_24h ?? ''),
+          market_cap: String(match.market_cap ?? ''),
+          holders: match.holders ?? 0,
+          updated_at: Math.floor(Date.now() / 1000)
+        };
+      }
+    } catch { /* try next */ }
+  }
+  return null;
+}
+
+// ── 本地存储 ──
 function saveDeployedToken(address, args) {
   try {
     const storageKey = 'goldlaunch_local_tokens';
@@ -863,6 +898,25 @@ function saveDeployedToken(address, args) {
 
     localStorage.setItem(storageKey, JSON.stringify(existing));
     log(`合约信息已保存到本地存储，可在 GOLDLAUNCH 代币广场查看。`);
+    // 背景抓取 Ave.ai 市场数据（非关键，不影响主流程）
+    fetchAndCacheAveData(address).then(cached => {
+      if (cached) {
+        try {
+          const list = JSON.parse(localStorage.getItem(storageKey) || '[]');
+          const idx = list.findIndex(t => t.address && t.address.toLowerCase() === address.toLowerCase());
+          if (idx >= 0) {
+            list[idx].price = Number(cached.price_usd) || list[idx].price;
+            list[idx].priceUsd = Number(cached.price_usd) || null;
+            list[idx].change = cached.change_24h != null ? Number(cached.change_24h) : 0;
+            list[idx].cap = cached.market_cap ? '$' + (Number(cached.market_cap) < 1000 ? Number(cached.market_cap).toFixed(2) : (Number(cached.market_cap)/1000).toFixed(1)+'K') : '--';
+            list[idx].vol = cached.volume_24h ? '$' + (Number(cached.volume_24h) < 1000 ? Number(cached.volume_24h).toFixed(2) : (Number(cached.volume_24h)/1000).toFixed(1)+'K') : '--';
+            list[idx].hasMarket = true;
+            list[idx]._cached = cached;
+            localStorage.setItem(storageKey, JSON.stringify(list));
+          }
+        } catch {}
+      }
+    });
   } catch (err) {
     // Non-critical, don't block the user
     console.warn('保存合约到本地存储失败:', err);

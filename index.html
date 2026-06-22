@@ -1925,11 +1925,60 @@ async function refreshLocalTokens() {
     } catch {
       // Keep local cached data
     }
+    // Background: try to fetch Ave.ai market data for this local token
+    if (!localTokens[i].hasMarket) {
+      fetchAveMarketData(addr).then(cached => {
+        if (cached) {
+          localTokens[i].price = Number(cached.price_usd) || localTokens[i].price;
+          localTokens[i].priceUsd = Number(cached.price_usd) || null;
+          localTokens[i].change = cached.change_24h != null ? Number(cached.change_24h) : 0;
+          localTokens[i].cap = cached.market_cap ? '$' + (Number(cached.market_cap) < 1000 ? Number(cached.market_cap).toFixed(2) : (Number(cached.market_cap)/1000).toFixed(1)+'K') : '--';
+          localTokens[i].vol = cached.volume_24h ? '$' + (Number(cached.volume_24h) < 1000 ? Number(cached.volume_24h).toFixed(2) : (Number(cached.volume_24h)/1000).toFixed(1)+'K') : '--';
+          localTokens[i].hasMarket = true;
+          localTokens[i]._cached = cached;
+          saveLocalTokens(localTokens);
+          renderTokens();
+        }
+      }).catch(() => {});
+    }
   }
   if (changed) {
     saveLocalTokens(localTokens);
     renderTokens();
   }
+}
+
+// ── Ave.ai 市场数据抓取（带 CORS 代理回退）──
+async function fetchAveMarketData(address) {
+  const aveUrl = `https://prod.ave-api.com/v2/tokens?keyword=${encodeURIComponent(address)}&chain=bsc`;
+  const headers = { 'X-API-KEY': 'UgbYEGOBtEx8r3uLTxCJPx7sEaYYMvZ6219iLSdYBUIFwbzu3HZ9qMeMprSdkHp9' };
+  for (const fetcher of [
+    () => fetch(aveUrl, { headers }),
+    () => fetch('https://corsproxy.io/?' + encodeURIComponent(aveUrl))
+  ]) {
+    try {
+      const res = await fetcher();
+      if (!res.ok) continue;
+      const data = await res.json();
+      const tokens = data?.data || [];
+      const match = Array.isArray(tokens)
+        ? tokens.find(t => (t.token || '').toLowerCase() === address.toLowerCase())
+        : null;
+      if (match) {
+        return {
+          symbol: match.symbol || '',
+          name: match.name || '',
+          price_usd: String(match.current_price_usd ?? ''),
+          change_24h: String(match.price_change_24h ?? ''),
+          volume_24h: String(match.tx_volume_u_24h ?? ''),
+          market_cap: String(match.market_cap ?? ''),
+          holders: match.holders ?? 0,
+          updated_at: Math.floor(Date.now() / 1000)
+        };
+      }
+    } catch { /* try next */ }
+  }
+  return null;
 }
 
 </script>
