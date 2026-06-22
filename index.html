@@ -44,8 +44,7 @@ nav {
   justify-content: space-between;
   padding: 0 7%;
   height: 64px;
-  background: rgba(8,8,8,0.92);
-  backdrop-filter: blur(16px);
+  background: rgba(8,8,8,0.98);
   border-bottom: 1px solid var(--border);
 }
 
@@ -131,7 +130,8 @@ nav {
   border: none;
   cursor: pointer;
   padding: 8px;
-  z-index: 200;
+  position: relative;
+  z-index: 1000;
 }
 .hamburger span {
   display: block;
@@ -983,14 +983,13 @@ footer {
   .nav-menu {
     position: fixed;
     inset: 0;
-    background: rgba(8,8,8,0.97);
-    backdrop-filter: blur(20px);
+    background: rgba(8,8,8,0.98);
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 24px;
     display: none;
-    z-index: 150;
+    z-index: 999;
   }
   .nav-menu.open { display: flex; }
   .nav-menu a {
