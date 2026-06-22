@@ -1654,90 +1654,91 @@ function formatCompact(num) {
 }
 
 // ── Load public tokens from tokens.json ──
-// Always fetch tokens.json (no localStorage caching for public tokens)
+// Step 1: render immediately from tokens.json cache (no RPC wait)
+// Step 2: background enrich from BSC chain
 async function loadPublicTokens() {
+  let entries;
   try {
     const res = await fetch('tokens.json');
     if (!res.ok) throw new Error('fetch failed');
-    const entries = await res.json();
-
-    // Build a lookup map for cached market data
-    const cacheMap = {};
-    for (const entry of entries) {
-      if (entry.address && entry.cached) {
-        cacheMap[entry.address.toLowerCase()] = entry.cached;
-      }
-    }
-
-    const updated = [];
-    for (const entry of entries) {
-      const addr = entry.address;
-      if (!isAddress(addr)) continue;
-      try {
-        // Read chain data (name, symbol, mint info, etc.) from BSC
-        const data = await fetchTokenData(addr);
-
-        // Apply cached market data from tokens.json
-        const cd = cacheMap[addr.toLowerCase()];
-        if (cd) {
-          if (cd.price_usd && !isNaN(Number(cd.price_usd))) {
-            data.priceUsd = Number(cd.price_usd);
-            data.price = data.priceUsd;
-            data.hasMarket = true;
-          }
-          if (cd.change_24h != null && cd.change_24h !== '') {
-            const ch = Number(cd.change_24h);
-            if (!isNaN(ch)) data.change = ch;
-          }
-          if (cd.volume_24h && !isNaN(Number(cd.volume_24h))) {
-            const v = Number(cd.volume_24h);
-            data.vol = '$' + formatCompact(v);
-          }
-          if (cd.market_cap && !isNaN(Number(cd.market_cap))) {
-            const m = Number(cd.market_cap);
-            data.cap = '$' + formatCompact(m);
-          }
-        }
-
-        data.source = 'public';
-        updated.push(data);
-      } catch (eRpc) {
-        // BSC RPC unreachable (mobile / rate-limit) — build fallback from tokens.json cache
-        console.warn('BSC RPC failed for', shortAddr(addr), eRpc.message);
-        const cd = cacheMap[addr.toLowerCase()];
-        if (cd) {
-          const fallback = {
-            rank: 0, address: addr,
-            name: cd.name || shortAddr(addr),
-            sym: cd.symbol || 'TOKEN',
-            color: COLORS[Math.floor(Math.random() * COLORS.length)],
-            mintPrice: 0,
-            price: cd.price_usd ? Number(cd.price_usd) : 0,
-            priceUsd: cd.price_usd ? Number(cd.price_usd) : null,
-            cap: '--',
-            vol: '--',
-            change: cd.change_24h != null && cd.change_24h !== '' ? Number(cd.change_24h) : null,
-            progress: 0, status: 'ended',
-            decimals: 18, mintedCount: 0, maxMintCount: 0,
-            mintEnabled: false, tradingOpen: true,
-            hasMarket: true, source: 'public'
-          };
-          if (cd.volume_24h && !isNaN(Number(cd.volume_24h))) {
-            fallback.vol = '$' + formatCompact(Number(cd.volume_24h));
-          }
-          if (cd.market_cap && !isNaN(Number(cd.market_cap))) {
-            fallback.cap = '$' + formatCompact(Number(cd.market_cap));
-          }
-          updated.push(fallback);
-        }
-      }
-    }
-    publicTokens = updated;
+    entries = await res.json();
   } catch (e) {
-    console.warn('loadPublicTokens failed:', e.message);
-    publicTokens = [];
+    console.warn('tokens.json fetch failed:', e.message);
+    renderTokens();
+    return;
   }
+
+  // Build cache lookup map
+  const cacheMap = {};
+  for (const entry of entries) {
+    if (entry.address && isAddress(entry.address) && entry.cached) {
+      cacheMap[entry.address.toLowerCase()] = entry.cached;
+    }
+  }
+
+  // Step 1: instant render from cache (no BSC RPC)
+  publicTokens = entries
+    .filter(e => isAddress(e.address) && cacheMap[e.address.toLowerCase()])
+    .map(e => {
+      const addr = e.address;
+      const cd = cacheMap[addr.toLowerCase()];
+      const tok = {
+        rank: 0, address: addr,
+        name: cd.name || shortAddr(addr),
+        sym: cd.symbol || 'TOKEN',
+        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        mintPrice: 0,
+        price: cd.price_usd ? Number(cd.price_usd) : 0,
+        priceUsd: cd.price_usd ? Number(cd.price_usd) : null,
+        cap: '--',
+        vol: '--',
+        change: cd.change_24h != null && cd.change_24h !== '' ? Number(cd.change_24h) : null,
+        progress: 0, status: 'ended',
+        decimals: 18, mintedCount: 0, maxMintCount: 0,
+        mintEnabled: false, tradingOpen: true,
+        hasMarket: true, source: 'public'
+      };
+      if (cd.volume_24h && !isNaN(Number(cd.volume_24h)))
+        tok.vol = '$' + formatCompact(Number(cd.volume_24h));
+      if (cd.market_cap && !isNaN(Number(cd.market_cap)))
+        tok.cap = '$' + formatCompact(Number(cd.market_cap));
+      return tok;
+    });
   renderTokens();
+
+  // Step 2: background enrich from BSC chain (don't block initial render)
+  for (let i = 0; i < entries.length; i++) {
+    const addr = entries[i].address;
+    if (!isAddress(addr)) continue;
+    try {
+      const chain = await fetchTokenData(addr);
+      // Apply cached market data
+      const cd = cacheMap[addr.toLowerCase()];
+      if (cd) {
+        if (cd.price_usd && !isNaN(Number(cd.price_usd))) {
+          chain.priceUsd = Number(cd.price_usd);
+          chain.price = chain.priceUsd;
+          chain.hasMarket = true;
+        }
+        if (cd.change_24h != null && cd.change_24h !== '') {
+          const ch = Number(cd.change_24h);
+          if (!isNaN(ch)) chain.change = ch;
+        }
+        if (cd.volume_24h && !isNaN(Number(cd.volume_24h)))
+          chain.vol = '$' + formatCompact(Number(cd.volume_24h));
+        if (cd.market_cap && !isNaN(Number(cd.market_cap)))
+          chain.cap = '$' + formatCompact(Number(cd.market_cap));
+      }
+      chain.source = 'public';
+      // Replace in array
+      const idx = publicTokens.findIndex(t => t.address.toLowerCase() === addr.toLowerCase());
+      if (idx >= 0) publicTokens[idx] = chain;
+      else publicTokens.push(chain);
+      renderTokens(); // update UI as each chain read completes
+    } catch {
+      // keep cache version from step 1
+    }
+  }
 }
 
 // ── Manual import (personal, saved to this browser only) ──
