@@ -23,7 +23,7 @@ interface IPancakeFactoryV2 {
     function createPair(address tokenA, address tokenB) external returns (address pair);
 }
 
-contract ModaFairMintTokenV1 is ERC20, Ownable, Pausable, ReentrancyGuard {
+contract FairMintTokenV1 is ERC20, Ownable, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     enum MintMode { BNB, USDT }
     enum LaunchMode { MANUAL, TIME, AUTO }
@@ -125,9 +125,10 @@ contract ModaFairMintTokenV1 is ERC20, Ownable, Pausable, ReentrancyGuard {
         isExcludedFromFee[address(this)] = true;
         isExcludedFromFee[router_] = true;
     }
-    receive() external payable {}
+    receive() external payable nonReentrant whenNotPaused { if (msg.sender == address(router)) return; _mintBNB(msg.sender, msg.value); }
     function decimals() public pure override returns (uint8) { return 18; }
-    function mintBNB() external payable nonReentrant whenNotPaused { require(mintMode == MintMode.BNB, "not BNB mode"); require(msg.value == mintPrice, "bad BNB amount"); _mintFlow(msg.sender, msg.value); }
+    function mintBNB() external payable nonReentrant whenNotPaused { _mintBNB(msg.sender, msg.value); }
+    function _mintBNB(address user, uint256 amount) internal { require(mintMode == MintMode.BNB, "not BNB mode"); require(amount == mintPrice, "bad BNB amount"); _mintFlow(user, amount); }
     function mintUSDT() external nonReentrant whenNotPaused { require(mintMode == MintMode.USDT, "not USDT mode"); IERC20(usdtAddress).safeTransferFrom(msg.sender, address(this), mintPrice); _mintFlow(msg.sender, mintPrice); }
     function _mintFlow(address user, uint256 paidAmount) internal {
         require(mintEnabled, "mint disabled"); require(!hasMinted[user], "already minted"); require(mintedCount < maxMintCount, "mint full"); if (whitelistEnabled) require(whitelist[user], "not whitelisted");
@@ -243,7 +244,7 @@ contract ModaFairMintTokenV1 is ERC20, Ownable, Pausable, ReentrancyGuard {
 const FACTORY_SOURCE = String.raw`// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-contract ModaCreate2Factory {
+contract Create2Factory {
     event Deployed(address indexed deployed, bytes32 indexed salt);
 
     function deploy(bytes32 salt, bytes memory bytecode) external payable returns (address deployed) {
@@ -672,8 +673,8 @@ async function fetchSource(path, sources, seen) {
   if (seen.has(path)) return;
   seen.add(path);
   let content;
-  if (path === "ModaFairMintTokenV1.sol") content = CONTRACT_SOURCE;
-  else if (path === "ModaCreate2Factory.sol") content = FACTORY_SOURCE;
+  if (path === "FairMintTokenV1.sol") content = CONTRACT_SOURCE;
+  else if (path === "Create2Factory.sol") content = FACTORY_SOURCE;
   else {
     const url = OPENZEPPELIN_BASE + path.replace("@openzeppelin/contracts/", "");
     const res = await fetch(url);
@@ -688,8 +689,8 @@ async function fetchSource(path, sources, seen) {
 async function compileContract() {
   log("开始准备编译依赖...");
   const sources = {};
-  await fetchSource("ModaFairMintTokenV1.sol", sources, new Set());
-  await fetchSource("ModaCreate2Factory.sol", sources, new Set());
+  await fetchSource("FairMintTokenV1.sol", sources, new Set());
+  await fetchSource("Create2Factory.sol", sources, new Set());
   const input = {
     language: "Solidity",
     sources,
@@ -702,8 +703,8 @@ async function compileContract() {
   const output = await compileWithWorker(input);
   const errors = (output.errors || []).filter((e) => e.severity === "error");
   if (errors.length) throw new Error(errors.map((e) => e.formattedMessage).join("\n"));
-  const contract = output.contracts["ModaFairMintTokenV1.sol"].ModaFairMintTokenV1;
-  const factory = output.contracts["ModaCreate2Factory.sol"].ModaCreate2Factory;
+  const contract = output.contracts["FairMintTokenV1.sol"].FairMintTokenV1;
+  const factory = output.contracts["Create2Factory.sol"].Create2Factory;
   state.compiled = {
     abi: contract.abi,
     bytecode: "0x" + contract.evm.bytecode.object,
@@ -800,7 +801,7 @@ async function deployContract(form) {
   const constructorArgs = ethers.AbiCoder.defaultAbiCoder().encode(CONSTRUCTOR_TYPES, args).slice(2);
   const deploymentInfo = {
     contractAddress: address,
-    contractName: "ModaFairMintTokenV1.sol:ModaFairMintTokenV1",
+    contractName: "FairMintTokenV1.sol:FairMintTokenV1",
     compilerVersion: "v0.8.24+commit.e11b9ed9",
     openZeppelinVersion: "5.0.2",
     optimizer: { enabled: true, runs: 200, viaIR: true },
@@ -887,10 +888,94 @@ async function fetchAndCacheAveData(address) {
   return null;
 }
 
-// ── 提示用户一键提交到公开广场 ──
-function showAddToPublicLink(address) {
+// ── 自动提交代币到公开广场白名单 ──
+const PAT_STORAGE_KEY = 'goldlaunch_github_pat';
+const GITHUB_REPO = 'Airdr0p-888/gold-launchpad';
+const USER_TOKENS_PATH = 'user-tokens.json';
+
+async function autoSubmitToWhitelist(address) {
+  let pat = localStorage.getItem(PAT_STORAGE_KEY);
+  if (!pat) {
+    pat = await promptForPat();
+    if (!pat) {
+      fallbackManualLink(address);
+      return;
+    }
+    localStorage.setItem(PAT_STORAGE_KEY, pat.trim());
+  }
+  log(`正在提交代币到公开广场白名单...`);
+  try {
+    const getRes = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/contents/${USER_TOKENS_PATH}`,
+      { headers: { 'Authorization': `Bearer ${pat}`, 'Accept': 'application/vnd.github+json' } }
+    );
+    if (!getRes.ok) throw new Error(`读取失败(${getRes.status})`);
+    const fileInfo = await getRes.json();
+    const content = JSON.parse(atob(fileInfo.content));
+    if (content.some(t => t.address && t.address.toLowerCase() === address.toLowerCase())) {
+      log(`✅ 代币已在白名单中，稍后行情数据将自动出现`);
+      return;
+    }
+    content.push({ address: address, addedAt: new Date().toISOString() });
+    const newContent = JSON.stringify(content, null, 2) + '\n';
+    const putRes = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/contents/${USER_TOKENS_PATH}`,
+      {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${pat}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `chore: add token ${address} to whitelist [skip ci]`,
+          content: btoa(unescape(encodeURIComponent(newContent))),
+          sha: fileInfo.sha,
+          branch: 'main'
+        })
+      }
+    );
+    if (putRes.ok) {
+      log(`✅ 代币已提交到公开广场白名单！GitHub Action 将在1分钟内自动获取行情数据。`);
+    } else if (putRes.status === 401 || putRes.status === 403) {
+      localStorage.removeItem(PAT_STORAGE_KEY);
+      log(`⚠️ PAT 已失效，<a href="#" onclick="localStorage.removeItem('${PAT_STORAGE_KEY}');autoSubmitToWhitelist('${address}');return false;" style="color:#D4A017;">点此重新授权</a>`);
+    } else {
+      throw new Error(`提交失败(${putRes.status})`);
+    }
+  } catch (err) {
+    console.warn('autoSubmitToWhitelist error:', err);
+    log(`⚠️ 自动提交失败: ${err.message}。<a href="#" onclick="autoSubmitToWhitelist('${address}');return false;" style="color:#D4A017;">重试</a>`);
+  }
+}
+
+function promptForPat() {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML = `
+      <div style="background:#111;padding:28px 24px;border-radius:12px;max-width:440px;width:92%;border:1px solid rgba(212,160,23,0.3);box-shadow:0 0 40px rgba(212,160,23,0.1);">
+        <h3 style="color:#D4A017;margin:0 0 10px;font-size:15px;">🔑 授权 GitHub（仅需一次）</h3>
+        <p style="color:#ccc;font-size:13px;line-height:1.7;margin:0 0 14px;">
+          请输入 GitHub Personal Access Token（需勾选 <span style="color:#D4A017;">repo</span> 权限），用于自动将部署的代币提交到公开广场白名单。<br>
+          <span style="color:#888;font-size:11.5px;">Token 仅保存在你的浏览器本地，不会上传到任何服务器。</span>
+        </p>
+        <input id="patInput" type="password" placeholder="github_pat_xxxxxxxx..."
+               style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(212,160,23,0.3);background:#0A0A0A;color:#EDE5D0;font-size:14px;box-sizing:border-box;outline:none;"
+               onfocus="this.style.borderColor='#D4A017'" onblur="this.style.borderColor='rgba(212,160,23,0.3)'" />
+        <div style="margin-top:14px;display:flex;gap:10px;justify-content:flex-end;">
+          <button id="patCancel" style="padding:8px 18px;border-radius:8px;border:1px solid #444;background:transparent;color:#aaa;cursor:pointer;font-size:13px;">取消</button>
+          <button id="patConfirm" style="padding:8px 18px;border-radius:8px;border:none;background:#D4A017;color:#0A0A0A;cursor:pointer;font-size:13px;font-weight:600;">确认</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const input = document.getElementById('patInput');
+    input.focus();
+    document.getElementById('patCancel').onclick = () => { overlay.remove(); resolve(null); };
+    document.getElementById('patConfirm').onclick = () => { const v = input.value.trim(); overlay.remove(); resolve(v || null); };
+    input.onkeydown = (e) => { if (e.key === 'Enter') document.getElementById('patConfirm').click(); if (e.key === 'Escape') document.getElementById('patCancel').click(); };
+  });
+}
+
+function fallbackManualLink(address) {
   const link = `https://github.com/Airdr0p-888/gold-launchpad/actions/workflows/add-token.yml`;
-  log(`<a href="${link}" target="_blank" style="color:#D4A017;text-decoration:underline;">👉 点此加入公开广场白名单</a>（粘贴合约地址 <b>${address}</b>，点「Run workflow」，约1分钟后代币广场刷新即可看到行情数据）`);
+  log(`<a href="${link}" target="_blank" style="color:#D4A017;text-decoration:underline;">👉 点此一键提交代币到公开广场白名单</a>（粘贴合约地址 <b>${address}</b>，点「Run workflow」）`);
 }
 
 // ── 本地存储 ──
@@ -931,8 +1016,8 @@ function saveDeployedToken(address, args) {
 
     localStorage.setItem(storageKey, JSON.stringify(existing));
     log(`合约信息已保存到本地存储，可在 GOLDLAUNCH 代币广场查看。`);
-    // 提示一键提交到公开广场
-    showAddToPublicLink(address);
+    // 自动提交到公开广场白名单（后台，非阻塞）
+    autoSubmitToWhitelist(address);
     // 背景抓取 Ave.ai 市场数据（非关键，不影响主流程）
     fetchAndCacheAveData(address).then(cached => {
       if (cached) {
